@@ -163,6 +163,37 @@ class CartTests {
 }
 
 
+class DeleteTests {
+    constructor(app) {
+        this.app = app;
+    }
+
+    async testDeleteProductsFromCart() {
+        try {
+            await this.app.navigation.openHomePage();
+
+            const user = new AccountData("standard_user", "secret_sauce");
+            await this.app.login.login(user);
+
+            await this.app.product.addProductToCart(By.css("*[data-test=\"add-to-cart-sauce-labs-backpack\"]"));
+            await this.app.product.addProductToCart(By.css("*[data-test=\"add-to-cart-sauce-labs-bike-light\"]"));
+
+            await this.app.navigation.openCartPage();
+
+            await this.app.driver.findElement(By.css("*[data-test=\"remove-sauce-labs-backpack\"]")).click();
+            await this.app.driver.findElement(By.css("*[data-test=\"remove-sauce-labs-bike-light\"]")).click();
+
+            // Проверяем, что корзина пустая
+            const cartItems = await this.app.driver.findElements(By.css('.cart_item'));
+            assert.strictEqual(cartItems.length, 0, "Cart should be empty after removing products");
+
+            console.log("Delete test passed successfully");
+        } catch (error) {
+            console.error("Delete test failed:", error);
+        }
+    }
+}
+
 // Запуск тестов
 (async function runAllTests() {
     const app = new ApplicationManager();
@@ -171,12 +202,17 @@ class CartTests {
 
         const loginTest = new LoginTests(app);
         const cartTest = new CartTests(app);
+        const deleteTest = new DeleteTests(app);
 
         console.log("Running login test...");
         await loginTest.testSuccessfulLogin();
 
+        console.log("\nRunning delete test...");
+        await deleteTest.testDeleteProductsFromCart();
+
         console.log("\nRunning cart test...");
         await cartTest.testAddProductsToCart();
+        
     } catch (error) {
         console.error("Unexpected error during test run:", error);
     } finally {
