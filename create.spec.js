@@ -1,6 +1,7 @@
 const { Builder, By, Key, until } = require('selenium-webdriver');
 const assert = require('assert');
 
+// Классы данных (Model)
 class AccountData {
     constructor(username, password) {
         this.username = username;
@@ -8,25 +9,50 @@ class AccountData {
     }
 }
 
-class TestBase {
-    constructor() {
-        this.driver = null;
+class ProductData {
+    constructor(name, price) {
+        this.name = name;
+        this.price = price;
+    }
+}
+
+// Базовый класс для помощников
+class HelperBase {
+    constructor(manager) {
+        this.manager = manager;
+        this.driver = manager.driver;
+    }
+
+    async isElementPresent(locator) {
+        try {
+            await this.driver.findElement(locator);
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+}
+
+// Классы помощников
+class NavigationHelper extends HelperBase {
+    constructor(manager) {
+        super(manager);
         this.baseURL = "https://www.saucedemo.com/";
     }
 
-    async setUp() {
-        this.driver = await new Builder().forBrowser('firefox').build();
+    async openHomePage() {
+        await this.driver.get(this.baseURL);
         await this.driver.manage().window().setRect({ width: 1209, height: 830 });
     }
 
-    async tearDown() {
-        if (this.driver) {
-            await this.driver.quit();
-        }
+    async openCartPage() {
+        await this.driver.findElement(By.css("*[data-test=\"shopping-cart-link\"]")).click();
     }
+}
 
-    async goToHomePage() {
-        await this.driver.get(this.baseURL);
+class LoginHelper extends HelperBase {
+    constructor(manager) {
+        super(manager);
     }
 
     async login(account) {
@@ -38,49 +64,121 @@ class TestBase {
     }
 }
 
-describe('Login Tests', function() {
-    this.timeout(30000);
-    const testBase = new TestBase();
-    const user = new AccountData("standard_user", "secret_sauce");
+class ProductHelper extends HelperBase {
+    constructor(manager) {
+        super(manager);
+    }
 
-    beforeEach(async function() {
-        await testBase.setUp();
-        await testBase.goToHomePage();
-    });
+    async addProductToCart(productLocator) {
+        await this.driver.findElement(productLocator).click();
+    }
+}
 
-    afterEach(async function() {
-        await testBase.tearDown();
-    });
+// Менеджер приложения
+class ApplicationManager {
+    constructor() {
+        this.driver = null;
+        this.navigation = null;
+        this.login = null;
+        this.product = null;
+    }
 
-    it('should login successfully', async function() {
-        await testBase.login(user);
-        const currentUrl = await testBase.driver.getCurrentUrl();
-        assert.ok(currentUrl.includes("/inventory.html"), "Login failed");
-    });
-});
+    async start() {
+        this.driver = await new Builder().forBrowser('firefox').build();
+        this.navigation = new NavigationHelper(this);
+        this.login = new LoginHelper(this);
+        this.product = new ProductHelper(this);
+    }
 
-describe('Cart Tests', function() {
-    this.timeout(30000);
-    const testBase = new TestBase();
-    const user = new AccountData("standard_user", "secret_sauce");
+    async stop() {
+        if (this.driver) {
+            await this.driver.quit();
+        }
+    }
+}
 
-    beforeEach(async function() {
-        await testBase.setUp();
-        await testBase.goToHomePage();
-        await testBase.login(user);
-    });
+// Базовый класс для тестов
+class TestBase {
+    constructor() {
+        this.app = new ApplicationManager();
+    }
 
-    afterEach(async function() {
-        await testBase.tearDown();
-    });
+    async setUp() {
+        await this.app.start();
+    }
 
-    it('should add items to cart', async function() {
-        await testBase.driver.findElement(By.css("*[data-test=\"add-to-cart-sauce-labs-backpack\"]")).click();
-        await testBase.driver.findElement(By.css("*[data-test=\"add-to-cart-sauce-labs-bike-light\"]")).click();
-        
-        await testBase.driver.findElement(By.css("*[data-test=\"shopping-cart-link\"]")).click();
-        
-        const cartItems = await testBase.driver.findElements(By.css('.cart_item'));
-        assert.strictEqual(cartItems.length, 2, "Should be 2 items in cart");
-    });
-});
+    async tearDown() {
+        await this.app.stop();
+    }
+}
+
+// Тесты
+class LoginTests extends TestBase {
+    constructor() {
+        super();
+    }
+
+    async testSuccessfulLogin() {
+        try {
+            await this.setUp();
+            await this.app.navigation.openHomePage();
+            
+            const user = new AccountData("standard_user", "secret_sauce");
+            await this.app.login.login(user);
+            
+            const currentUrl = await this.app.driver.getCurrentUrl();
+            assert.ok(currentUrl.includes("/inventory.html"), "Login failed");
+            
+            console.log("Login test passed successfully");
+        } catch (error) {
+            console.error("Login test failed:", error);
+        } finally {
+            await this.tearDown();
+        }
+    }
+}
+
+class CartTests extends TestBase {
+    constructor() {
+        super();
+    }
+
+    async testAddProductsToCart() {
+        try {
+            await this.setUp();
+            await this.app.navigation.openHomePage();
+            
+            // Логинимся
+            const user = new AccountData("standard_user", "secret_sauce");
+            await this.app.login.login(user);
+            
+            // Добавляем товары
+            await this.app.product.addProductToCart(By.css("*[data-test=\"add-to-cart-sauce-labs-backpack\"]"));
+            await this.app.product.addProductToCart(By.css("*[data-test=\"add-to-cart-sauce-labs-bike-light\"]"));
+            
+            // Переходим в корзину
+            await this.app.navigation.openCartPage();
+            
+            // Проверяем
+            const cartItems = await this.app.driver.findElements(By.css('.cart_item'));
+            assert.strictEqual(cartItems.length, 2, "Should be 2 items in cart");
+            
+            console.log("Cart test passed successfully");
+        } catch (error) {
+            console.error("Cart test failed:", error);
+        } finally {
+            await this.tearDown();
+        }
+    }
+}
+
+// Запуск тестов
+(async function() {
+    console.log("Running login test...");
+    const loginTest = new LoginTests();
+    await loginTest.testSuccessfulLogin();
+
+    console.log("\nRunning cart test...");
+    const cartTest = new CartTests();
+    await cartTest.testAddProductsToCart();
+})();
