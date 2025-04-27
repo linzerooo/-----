@@ -113,14 +113,13 @@ class TestBase {
 }
 
 // Тесты
-class LoginTests extends TestBase {
-    constructor() {
-        super();
+class LoginTests {
+    constructor(app) {
+        this.app = app;
     }
 
     async testSuccessfulLogin() {
         try {
-            await this.setUp();
             await this.app.navigation.openHomePage();
             
             const user = new AccountData("standard_user", "secret_sauce");
@@ -132,53 +131,55 @@ class LoginTests extends TestBase {
             console.log("Login test passed successfully");
         } catch (error) {
             console.error("Login test failed:", error);
-        } finally {
-            await this.tearDown();
         }
     }
 }
 
-class CartTests extends TestBase {
-    constructor() {
-        super();
+class CartTests {
+    constructor(app) {
+        this.app = app;
     }
 
     async testAddProductsToCart() {
         try {
-            await this.setUp();
             await this.app.navigation.openHomePage();
             
-            // Логинимся
             const user = new AccountData("standard_user", "secret_sauce");
             await this.app.login.login(user);
             
-            // Добавляем товары
             await this.app.product.addProductToCart(By.css("*[data-test=\"add-to-cart-sauce-labs-backpack\"]"));
             await this.app.product.addProductToCart(By.css("*[data-test=\"add-to-cart-sauce-labs-bike-light\"]"));
             
-            // Переходим в корзину
             await this.app.navigation.openCartPage();
             
-            // Проверяем
             const cartItems = await this.app.driver.findElements(By.css('.cart_item'));
             assert.strictEqual(cartItems.length, 2, "Should be 2 items in cart");
             
             console.log("Cart test passed successfully");
         } catch (error) {
             console.error("Cart test failed:", error);
-        } finally {
-            await this.tearDown();
         }
     }
 }
 
-// Запуск тестов
-(async function() {
-    console.log("Running login test...");
-    const loginTest = new LoginTests();
-    await loginTest.testSuccessfulLogin();
 
-    console.log("\nRunning cart test...");
-    const cartTest = new CartTests();
-    await cartTest.testAddProductsToCart();
+// Запуск тестов
+(async function runAllTests() {
+    const app = new ApplicationManager();
+    try {
+        await app.start();
+
+        const loginTest = new LoginTests(app);
+        const cartTest = new CartTests(app);
+
+        console.log("Running login test...");
+        await loginTest.testSuccessfulLogin();
+
+        console.log("\nRunning cart test...");
+        await cartTest.testAddProductsToCart();
+    } catch (error) {
+        console.error("Unexpected error during test run:", error);
+    } finally {
+        await app.stop();
+    }
 })();
